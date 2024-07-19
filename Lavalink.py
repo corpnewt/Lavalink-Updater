@@ -256,7 +256,31 @@ def print_line(lines,text):
     lines.append(text)
     return lines
 
-def main(list_update = False, update = True, only_update = False, force = False, force_if_different = False, prompt_answer = None, l_target = None, y_target = None):
+def main(skip_git = False, list_update = False, update = True, only_update = False, force = False, force_if_different = False, prompt_answer = None, l_target = None, y_target = None):
+    if not skip_git:
+        git = get_bin_path("git")
+        if git:
+            # Try our update
+            updated = False
+            cwd = os.getcwd()
+            os.chdir(os.path.dirname(os.path.realpath(__file__)))
+            try:
+                p = subprocess.run(
+                    git,
+                    check=True,
+                    stderr=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE
+                )
+                if not "up to date" in p.stdout.decode("utf-8"):
+                    updated = True
+            except:
+                pass
+            os.chdir(cwd)
+            if updated:
+                # Restart ourselves via subprocess
+                p = subprocess.Popen([sys.executable,os.path.realpath(__file__)]+sys.argv[1:])
+                p.communicate()
+                exit(p.returncode)
     if list_update:
         print("Local versions:")
         yts_version = check_yts_version(YML_PATH)
@@ -416,12 +440,14 @@ if __name__ == "__main__":
     parser.add_argument("-d", "--force-if-different", help="force Lavalink.jar and YouTube-Source updates only if the local and remote versions are different", action="store_true")
     parser.add_argument("-s", "--skip-updates", help="skip update checks (overrides --force)", action="store_true")
     parser.add_argument("-o", "--only-update", help="only update, don't start Lavalink (overrides --skip-updates)", action="store_true")
+    parser.add_argument("-g", "--skip-git", help="GitHub self updates", action="store_true")
     parser.add_argument("-r", "--handle-running", help="how to handle detected currently running Lavalink.jar instances", choices=["kill","ignore","quit","ask"], default="ask")
 
     args = parser.parse_args()
 
     prompt_dict = {"kill":"y","ignore":"n","quit":"q"}
     main(
+        skip_git=args.skip_git,
         list_update=args.check_updates,
         update=not args.skip_updates,
         only_update=args.only_update,
