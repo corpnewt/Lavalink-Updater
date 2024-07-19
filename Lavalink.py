@@ -320,17 +320,13 @@ def main(skip_git = False, list_update = False, update = True, only_update = Fal
     if not JAVA_PATH:
         print("Could not locate java!")
         print("")
-        try: u.grab("Press [enter] to exit...")
-        except KeyboardInterrupt: pass
         exit(1)
     # Let's verify if we have an application.yml or not - and inform the user
     if not os.path.isfile(YML_PATH):
         print("{} not found!\n".format(YML_PATH))
         print("Please visit the following link to create one:")
         print(" - {}\n".format(DOC_URL))
-        try: u.grab("Press [enter] to exit...")
-        except KeyboardInterrupt: pass
-        exit()
+        exit(1)
     # Scrape the version
     lines = print_line(lines,"Gathering local versions...")
     yts_version = check_yts_version(YML_PATH)
@@ -341,9 +337,7 @@ def main(skip_git = False, list_update = False, update = True, only_update = Fal
         print("")
         print("Please visit the following link for info:")
         print(" - {}\n".format(DOC_URL))
-        try: u.grab("Press [enter] to exit...")
-        except KeyboardInterrupt: pass
-        exit()
+        exit(1)
     # Let's check for updates now
     ll_version = check_lavalink_version(LAVALINK_PATH)
     lines = print_line(lines," - Lavalink: {}".format(ll_version or "MISSING"))
@@ -405,9 +399,7 @@ def main(skip_git = False, list_update = False, update = True, only_update = Fal
     print("\nStarting Lavalink.jar...")
     if not os.path.isfile(LAVALINK_PATH):
         print(" - File does not exist!\n")
-        try: u.grab("Press [enter] to exit...")
-        except KeyboardInterrupt: pass
-        exit()
+        exit(1)
     print("")
     cwd = os.getcwd()
     os.chdir(os.path.dirname(os.path.realpath(__file__)))
