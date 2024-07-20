@@ -13,7 +13,7 @@ DOC_URL = "https://lavalink.dev/configuration/index.html"
 LAVALINK_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)),"Lavalink.jar")
 YML_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)),"application.yml")
 
-u = utils.Utils("Lavalink Starter")
+u = utils.Utils("Lavalink Updater")
 
 DL = None
 try: DL = downloader.Downloader()
@@ -257,29 +257,6 @@ def print_line(lines,text):
     return lines
 
 def main(skip_git = False, list_update = False, update = True, only_update = False, force = False, force_if_different = False, prompt_answer = None, l_target = None, y_target = None):
-    if not skip_git:
-        git = get_bin_path("git")
-        if git:
-            # Try our update
-            updated = False
-            cwd = os.getcwd()
-            os.chdir(os.path.dirname(os.path.realpath(__file__)))
-            try:
-                p = subprocess.run(
-                    [git,"pull"],
-                    stderr=subprocess.DEVNULL,
-                    stdout=subprocess.PIPE
-                )
-                if p.returncode == 0 and not "up to date" in p.stdout.decode("utf-8"):
-                    updated = True
-            except:
-                pass
-            os.chdir(cwd)
-            if updated:
-                # Restart ourselves via subprocess
-                p = subprocess.Popen([sys.executable,os.path.realpath(__file__)]+sys.argv[1:])
-                p.communicate()
-                exit(p.returncode)
     if list_update:
         print("Local versions:")
         yts_version = check_yts_version(YML_PATH)
@@ -314,6 +291,32 @@ def main(skip_git = False, list_update = False, update = True, only_update = Fal
         exit()
     u.head()
     lines = print_line([],"\n{}: Starting Lavalink update...\n".format(datetime.datetime.now().time().isoformat()))
+    if not skip_git:
+        git = get_bin_path("git")
+        if git:
+            lines = print_line(lines,"Checking for Lavalink-Updater updates...")
+            # Try our update
+            updated = False
+            cwd = os.getcwd()
+            os.chdir(os.path.dirname(os.path.realpath(__file__)))
+            try:
+                p = subprocess.run(
+                    [git,"pull"],
+                    stderr=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE
+                )
+                if p.returncode == 0 and not "up to date" in p.stdout.decode("utf-8"):
+                    updated = True
+            except:
+                pass
+            os.chdir(cwd)
+            if updated:
+                lines = print_line(lines," - Updated, restarting...\n")
+                # Restart ourselves via subprocess
+                p = subprocess.Popen([sys.executable,os.path.realpath(__file__)]+sys.argv[1:])
+                p.communicate()
+                exit(p.returncode)
+            lines = print_line(lines," - Already up to date\n")
     lines = print_line(lines,"Gathering info...")
     # First check for java
     if not JAVA_PATH:
@@ -424,7 +427,7 @@ else:
 if __name__ == "__main__":
     # Setup the cli args
     parser = argparse.ArgumentParser(prog="Lavalink.py", description="Lavalink.py - a py script to update and launch Lavalink.jar")
-    parser.add_argument("-c", "--check-updates", help="only report the latest Lavalink and YouTube-Source versions (overrides all but --help)", action="store_true")
+    parser.add_argument("-c", "--check-updates", help="only report the latest Lavalink and YouTube-Source versions (implies --skip-git, overrides all but --help)", action="store_true")
     parser.add_argument("-l", "--lavalink-version", help="update Lavalink.jar to the passed version tag instead of \"latest\" if it exists (requires --force[-if-different] if passing an older version)")
     parser.add_argument("-y", "--yts-version", help="update YouTube-Source to the passed version tag instead of \"latest\" if it exists (requires --force[-if-different] if passing an older version)")
     parser.add_argument("-f", "--force", help="force Lavalink.jar and YouTube-Source updates (overrides --force-if-different)", action="store_true")
