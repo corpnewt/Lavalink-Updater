@@ -11,7 +11,8 @@ Lavalink.py - a py script to update and launch Lavalink.jar
 
 options:
   -h, --help            show this help message and exit
-  -c, --check-updates   only report the latest Lavalink and YouTube-Source versions (overrides all but --help)
+  -c, --check-updates   only report the latest Lavalink and YouTube-Source versions (implies --skip-git, overrides all
+                        but --help)
   -l LAVALINK_VERSION, --lavalink-version LAVALINK_VERSION
                         update Lavalink.jar to the passed version tag instead of "latest" if it exists (requires
                         --force[-if-different] if passing an older version)
