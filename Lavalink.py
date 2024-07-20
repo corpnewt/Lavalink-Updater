@@ -19,7 +19,7 @@ DL = None
 try: DL = downloader.Downloader()
 except: pass
 
-PROC_REG = re.compile(r"(?i).*(?P<process>javaw?(\.exe)?)(\s*\")?(?P<arguments>(\s.*|\s)+(?P<jar>-jar)\s+.*(?P<lavalink>Lavalink\.jar))")
+PROC_REG = re.compile(r"(?i).*(?P<process>javaw?(\.exe)?)(\s*\")?(?P<arguments>(\s.*|\s)+(?P<jar>-jar)\s+.*(?P<lavalink>Lavalink\.jar)\s*\"?)")
 
 def check_yts_version(yml_file):
     yts_version = None
