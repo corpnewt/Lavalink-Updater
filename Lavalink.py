@@ -1,5 +1,5 @@
 from Scripts import utils, downloader
-import os, json, subprocess, re, tempfile, shutil, time, datetime, argparse
+import os, sys, json, subprocess, re, tempfile, shutil, time, datetime, argparse
 
 LAVALINK_URL  = "https://github.com/lavalink-devs/Lavalink/releases/{}"
 LAVALINK_REG = re.compile(r"(?i)Lavalink\.jar")
@@ -266,12 +266,11 @@ def main(skip_git = False, list_update = False, update = True, only_update = Fal
             os.chdir(os.path.dirname(os.path.realpath(__file__)))
             try:
                 p = subprocess.run(
-                    git,
-                    check=True,
+                    [git,"pull"],
                     stderr=subprocess.DEVNULL,
                     stdout=subprocess.PIPE
                 )
-                if not "up to date" in p.stdout.decode("utf-8"):
+                if p.returncode == 0 and not "up to date" in p.stdout.decode("utf-8"):
                     updated = True
             except:
                 pass
