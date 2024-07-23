@@ -2,10 +2,10 @@ from Scripts import utils, downloader
 import os, sys, json, subprocess, re, tempfile, shutil, time, datetime, argparse
 
 LAVALINK_URL  = "https://github.com/lavalink-devs/Lavalink/releases/{}"
-LAVALINK_REG = re.compile(r"(?i)Lavalink\.jar")
+LAVALINK_REG = re.compile(r"(?i)^Lavalink\.jar$")
 LAVALINK_KEY = "Lavalink"
 YTSOURCE_URL = "https://github.com/lavalink-devs/youtube-source/releases/{}"
-YTSOURCE_REG = re.compile(r"(?i)youtube-plugin-([0-9a-z]\.?)+\.jar")
+YTSOURCE_REG = re.compile(r"(?i)^youtube-plugin-([0-9a-z]\.?)+\.jar$")
 YTSOURCE_KEY = "youtube-source"
 
 DOC_URL = "https://lavalink.dev/configuration/index.html"
@@ -19,7 +19,7 @@ DL = None
 try: DL = downloader.Downloader()
 except: pass
 
-PROC_REG = re.compile(r"(?i).*(?P<process>javaw?(\.exe)?)(\s*\")?(?P<arguments>(\s.*|\s)+(?P<jar>-jar)\s+.*(?P<lavalink>Lavalink\.jar)\s*\"?)")
+PROC_REG = re.compile(r"(?i)^.*(?P<process>javaw?(\.exe)?)(\s*\")?(?P<arguments>(\s.*|\s)+(?P<jar>-jar)\s+.*(?P<lavalink>Lavalink\.jar)\s*\"?)$")
 
 def check_yts_version(yml_file):
     yts_version = None
@@ -109,10 +109,11 @@ def get_latest_info(key, url, regex_search):
         if '<a href="' in line:
             try:
                 asset_url = "https://github.com"+line.split('<a href="')[1].split('"')[0]
-                if regex_search.fullmatch(asset_url.split("/")[-1]):
+                if regex_search.match(asset_url.split("/")[-1]):
                     asset = asset_url
                     break
-            except: continue
+            except:
+                continue
     if version and asset:
         return (True,version,asset)
     return (False,version,asset)
@@ -120,13 +121,14 @@ def get_latest_info(key, url, regex_search):
 def get_bin_path(binary):
     bin_path = None
     try:
-        p = subprocess.run(
+        p = subprocess.Popen(
             ["where" if os.name == "nt" else "which",binary],
-            check=True,
-            stderr=subprocess.DEVNULL,
+            stderr=getattr(subprocess,"DEVNULL",open(os.devnull,"w")),
             stdout=subprocess.PIPE
         )
-        bin_path =  p.stdout.decode("utf-8").replace("\r","").split("\n")[0]
+        o,e = p.communicate()
+        assert p.returncode == 0
+        bin_path = o.decode("utf-8").replace("\r","").split("\n")[0]
     except:
         pass
     return bin_path
@@ -231,7 +233,7 @@ def get_pids(pid = None, include_comm = False):
         procs = p.stdout.decode("utf-8").replace("\r","")
         for line in procs.split("\n"):
             # Check if it's got valid command output
-            m = COMMAND_REG.fullmatch(line)
+            m = COMMAND_REG.match(line)
             if not m: continue
             if pid is not None:
                 # Checking for a specific PID
@@ -240,7 +242,7 @@ def get_pids(pid = None, include_comm = False):
             else:
                 # See if we have java(w)(.exe) -jar Lavalink.jar to
                 # reasonably assume we've found it
-                c = PROC_REG.fullmatch(m.group("command").strip())
+                c = PROC_REG.match(m.group("command").strip())
                 if not c: continue
             # Found it - retain it
             pids.append(
@@ -349,7 +351,7 @@ def main(skip_git = False, list_update = False, update = True, only_update = Fal
         # otherwise check for remote > local
         allowed_comparisons = (True,False) if force_if_different else (True,)
         lines = print_line(lines,"Gathering remote versions...")
-        y_success,y_version,y_ulr = get_latest_info(YTSOURCE_KEY,YTSOURCE_URL.format(y_target or "latest"),YTSOURCE_REG)
+        y_success,y_version,y_url = get_latest_info(YTSOURCE_KEY,YTSOURCE_URL.format(y_target or "latest"),YTSOURCE_REG)
         if not y_success:
             lines = print_line(lines," - YouTube-Source: Error checking for updates")
         else:
@@ -359,7 +361,7 @@ def main(skip_git = False, list_update = False, update = True, only_update = Fal
             lines = print_line(lines," - Lavalink: Error checking for updates")
         else:
             lines = print_line(lines," - Lavalink: {}".format(l_version))
-        if l_version and (force or ll_version is None or u.compare_versions(ll_version,l_version) in allowed_comparisons):
+        if (l_version and l_url) and (force or ll_version is None or u.compare_versions(ll_version,l_version) in allowed_comparisons):
             lines = print_line(lines,"\n{}Updating Lavalink...".format("Force-" if force or force_if_different else ""))
             lines = print_line(lines,"")
             lines = print_line(lines,"Downloading {} ({})...".format(os.path.basename(l_url),l_version))
@@ -418,11 +420,11 @@ JAVA_PATH = get_bin_path("java")
 USE_WMIC = get_bin_path("wmic")
 if os.name == "nt":
     if USE_WMIC:
-        COMMAND_REG = re.compile(r"(?i)(?P<command>.*)\s+(?P<pid>\d+).*")
+        COMMAND_REG = re.compile(r"(?i)^(?P<command>.*)\s+(?P<pid>\d+).*$")
     else:
-        COMMAND_REG = re.compile(r"(?i)\s*(?P<pid>\d+)\s+(?P<command>.*)")
+        COMMAND_REG = re.compile(r"(?i)^\s*(?P<pid>\d+)\s+(?P<command>.*)$")
 else:
-    COMMAND_REG = re.compile(r"(?i)([^\s]+\s+)(?P<pid>\d+)\s+([^\s]+\s+){8}(?P<command>.*)")
+    COMMAND_REG = re.compile(r"(?i)^([^\s]+\s+)(?P<pid>\d+)\s+([^\s]+\s+){8}(?P<command>.*)$")
 
 if __name__ == "__main__":
     # Setup the cli args
