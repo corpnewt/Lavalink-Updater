@@ -1,12 +1,12 @@
 from Scripts import utils, downloader
 import os, sys, json, subprocess, re, tempfile, shutil, time, datetime, argparse
 
-LAVALINK_URL  = "https://github.com/lavalink-devs/Lavalink/releases/{}"
+LAVALINK_URL = "https://github.com/lavalink-devs/Lavalink/releases/{}"
+LAVALINK_API = "https://api.github.com/repos/lavalink-devs/Lavalink/releases/{}"
 LAVALINK_REG = re.compile(r"(?i)^Lavalink\.jar$")
-LAVALINK_KEY = "Lavalink"
 YTSOURCE_URL = "https://github.com/lavalink-devs/youtube-source/releases/{}"
+YTSOURCE_API = "https://api.github.com/repos/lavalink-devs/youtube-source/releases/{}"
 YTSOURCE_REG = re.compile(r"(?i)^youtube-plugin-([0-9a-z]\.?)+\.jar$")
-YTSOURCE_KEY = "youtube-source"
 
 DOC_URL = "https://lavalink.dev/configuration/index.html"
 
@@ -80,7 +80,44 @@ def check_lavalink_version(lavalink_file):
         pass
     return None
 
-def get_latest_info(key, url, regex_search):
+def get_latest_info(html, json_api, regex_search, prioritize_html=False):
+    # Prioritize HTML or the JSON API and return the first
+    # successful set of results
+    comms = ((get_latest_api_info,json_api),(get_latest_html_info,html))
+    # Iterate in order if prioritizing the JSON api, otherwise reverse
+    # the order
+    for comm,url in comms[::-1 if prioritize_html else 1]:
+        success,version,asset = comm(url,regex_search)
+        if success:
+            # If we succeeded, return the info
+            return (success,version,asset)
+    # If we got here, then nothing worked
+    return (False,None,None)
+
+def get_latest_api_info(url, regex_search):
+    # Use the GitHub JSON API for gathering our info
+    try:
+        json_data = json.loads(DL.get_string(url,progress=False))
+    except Exception as e:
+        json_data = None
+    if not json_data:
+        return (False,None,None)
+    # Get the version from the "tag_name" property
+    # and rip the appropriate asset
+    asset = version = None
+    try:
+        version = json_data["tag_name"]
+        for a in json_data["assets"]:
+            if regex_search.match(a.get("browser_download_url","").split("/")[-1]):
+                asset = a["browser_download_url"]
+                break
+    except:
+        pass
+    if version and asset:
+        return (True,version,asset)
+    return (False,version,asset)
+
+def get_latest_html_info(url, regex_search):
     # Get whatever we have stored in the settings from our last
     # successful download
     # Scrape the latest version from the url
@@ -258,7 +295,18 @@ def print_line(lines,text):
     lines.append(text)
     return lines
 
-def main(skip_git = False, list_update = False, update = True, only_update = False, force = False, force_if_different = False, prompt_answer = None, l_target = None, y_target = None):
+def main(
+    skip_git = False,
+    list_update = False,
+    update = True,
+    only_update = False,
+    prioritize_html = False,
+    force = False,
+    force_if_different = False,
+    prompt_answer = None,
+    l_target = None,
+    y_target = None
+    ):
     if list_update:
         print("Local versions:")
         yts_version = check_yts_version(YML_PATH)
@@ -267,12 +315,22 @@ def main(skip_git = False, list_update = False, update = True, only_update = Fal
         print(" - Lavalink: {}".format(ll_version or ("JAVA MISSING" if not JAVA_PATH else "MISSING")))
         print("Remote versions:")
         # Only checking for updates - gather them and report
-        y_success,y_version,y_ulr = get_latest_info(YTSOURCE_KEY,YTSOURCE_URL.format("latest"),YTSOURCE_REG)
+        y_success,y_version,y_ulr = get_latest_info(
+            YTSOURCE_URL.format("latest"),
+            YTSOURCE_API.format("latest"),
+            YTSOURCE_REG,
+            prioritize_html=prioritize_html
+        )
         if not y_success:
             print(" - YouTube-Source: Error checking for updates")
         else:
             print(" - YouTube-Source: {}".format(y_version))
-        l_success,l_version,l_url = get_latest_info(LAVALINK_KEY,LAVALINK_URL.format("latest"),LAVALINK_REG)
+        l_success,l_version,l_url = get_latest_info(
+            LAVALINK_URL.format("latest"),
+            LAVALINK_API.format("latest"),
+            LAVALINK_REG,
+            prioritize_html=prioritize_html
+        )
         if not l_success:
             print(" - Lavalink: Error checking for updates")
         else:
@@ -347,16 +405,30 @@ def main(skip_git = False, list_update = False, update = True, only_update = Fal
     lines = print_line(lines," - Lavalink: {}".format(ll_version or "MISSING"))
     # Lavalink first
     if only_update or update:
+        # The GitHub API expects api.github.com/repos/OWNER/REPO/releases/tags/TAG
+        # if not latest
+        y_api_target = "tags/{}".format(y_target) if y_target else None
+        l_api_target = "tags/{}".format(l_target) if l_target else None
         # If we're only forcing when different - check if they're not equal,
         # otherwise check for remote > local
         allowed_comparisons = (True,False) if force_if_different else (True,)
         lines = print_line(lines,"Gathering remote versions...")
-        y_success,y_version,y_url = get_latest_info(YTSOURCE_KEY,YTSOURCE_URL.format(y_target or "latest"),YTSOURCE_REG)
+        y_success,y_version,y_url = get_latest_info(
+            YTSOURCE_URL.format(y_target or "latest"),
+            YTSOURCE_API.format(y_api_target or "latest"),
+            YTSOURCE_REG,
+            prioritize_html=prioritize_html
+        )
         if not y_success:
             lines = print_line(lines," - YouTube-Source: Error checking for updates")
         else:
             lines = print_line(lines," - YouTube-Source: {}".format(y_version))
-        l_success,l_version,l_url = get_latest_info(LAVALINK_KEY,LAVALINK_URL.format(l_target or "latest"),LAVALINK_REG)
+        l_success,l_version,l_url = get_latest_info(
+            LAVALINK_URL.format(l_target or "latest"),
+            LAVALINK_API.format(l_api_target or "latest"),
+            LAVALINK_REG,
+            prioritize_html=prioritize_html
+        )
         if not l_success:
             lines = print_line(lines," - Lavalink: Error checking for updates")
         else:
@@ -437,6 +509,7 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--skip-updates", help="skip update checks (overrides --force)", action="store_true")
     parser.add_argument("-o", "--only-update", help="only update, don't start Lavalink (overrides --skip-updates)", action="store_true")
     parser.add_argument("-g", "--skip-git", help="GitHub self updates", action="store_true")
+    parser.add_argument("-p", "--prioritize-html", help="attempt to scrape html for updates before falling back on the GitHub JSON API (by default, the API is checked first)", action="store_true")
     parser.add_argument("-r", "--handle-running", help="how to handle detected currently running Lavalink.jar instances", choices=["kill","ignore","quit","ask"], default="ask")
 
     args = parser.parse_args()
@@ -447,6 +520,7 @@ if __name__ == "__main__":
         list_update=args.check_updates,
         update=not args.skip_updates,
         only_update=args.only_update,
+        prioritize_html=args.prioritize_html,
         force=args.force,
         force_if_different=args.force_if_different,
         prompt_answer=prompt_dict.get(args.handle_running),
