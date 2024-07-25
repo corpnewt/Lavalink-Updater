@@ -1,6 +1,11 @@
 from Scripts import utils, downloader
 import os, sys, json, subprocess, re, tempfile, shutil, time, datetime, argparse
 
+try:
+    from urllib.parse import quote
+except ImportError:
+    from urllib import quote
+
 LAVALINK_URL = "https://github.com/lavalink-devs/Lavalink/releases/{}"
 LAVALINK_API = "https://api.github.com/repos/lavalink-devs/Lavalink/releases/{}"
 LAVALINK_REG = re.compile(r"(?i)^Lavalink\.jar$")
@@ -66,13 +71,14 @@ def check_lavalink_version(lavalink_file):
         return None
     # Let's try to get the version via java -jar Lavalink.jar --version
     try:
-        p = subprocess.run(
+        p = subprocess.Popen(
             [JAVA_PATH,"-jar",lavalink_file,"--version"],
-            check=True,
             stderr=subprocess.PIPE,
             stdout=subprocess.PIPE
         )
-        lavalink_output = p.stderr.decode("utf-8").replace("\r","") + "\n" + p.stdout.decode("utf-8").replace("\r","")
+        o,e = p.communicate()
+        assert p.returncode == 0
+        lavalink_output = o.decode("utf-8").replace("\r","") + "\n" + e.decode("utf-8").replace("\r","")
         for line in lavalink_output.split("\n"):
             if line.lower().strip().startswith("version:"):
                 return ":".join(line.split(":")[1:]).strip()
@@ -407,8 +413,13 @@ def main(
     if only_update or update:
         # The GitHub API expects api.github.com/repos/OWNER/REPO/releases/tags/TAG
         # if not latest
-        y_api_target = "tags/{}".format(y_target) if y_target else None
-        l_api_target = "tags/{}".format(l_target) if l_target else None
+        y_api_target = l_api_target = None
+        if y_target:
+            y_target = quote(y_target)
+            y_api_target = "tags/{}".format(y_target)
+        if l_target:
+            l_target = quote(l_target)
+            l_api_target = "tags/{}".format(l_target)
         # If we're only forcing when different - check if they're not equal,
         # otherwise check for remote > local
         allowed_comparisons = (True,False) if force_if_different else (True,)
