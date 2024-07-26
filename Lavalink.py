@@ -119,21 +119,27 @@ def get_latest_api_info(url, regex_search):
                 break
     except:
         pass
-    if version and asset:
-        return (True,version,asset)
-    return (False,version,asset)
+    return (version and asset,version,asset)
 
 def get_latest_html_info(url, regex_search):
-    # Get whatever we have stored in the settings from our last
-    # successful download
-    # Scrape the latest version from the url
+    # First check if our URL ends with "latest" - if so,
+    # we should be able to build the assets URL ourselves.
+    if url.lower().endswith("/latest"):
+        # Let's rip the latest version just by following URL redirects
+        try:
+            url = DL.open_url(url).geturl()
+        except:
+            return (False,None,None)
+    # Now we should have the target URL including the tag.  Let's
+    # just rip the tag from it and try to load those assets.
+    version = asset_url = asset = None
     try:
-        html = DL.get_string(url,progress=False)
+        version = url.split("/")[-1]
+        assets_url = url.split("/releases/")[0]+"/releases/expanded_assets/{}".format(version)
+        asset_html = DL.get_string(asset_url,progress=False)
+        assert asset_html
     except:
-        html = None
-    if not html:
-        # Return Success/Fail, version, URL
-        return (False,None,None)
+        return (False,version,asset)
     # Check for expanded assets and version number
     asset_html = version = None
     try:
@@ -141,25 +147,18 @@ def get_latest_html_info(url, regex_search):
         assert asset_url
         version = asset_url.split("/")[-1]
         asset_html = DL.get_string(asset_url,progress=False)
+        for line in asset_html.split("\n"):
+            if '<a href="' in line:
+                try:
+                    asset_url = "https://github.com"+line.split('<a href="')[1].split('"')[0]
+                    if regex_search.match(asset_url.split("/")[-1]):
+                        asset = asset_url
+                        break
+                except:
+                    continue
     except:
         pass
-    if not asset_html:
-        # Return Success/Fail, version, URL
-        return (False,None,None)
-    # Try to scrape the assets for our regex_search
-    asset = None
-    for line in asset_html.split("\n"):
-        if '<a href="' in line:
-            try:
-                asset_url = "https://github.com"+line.split('<a href="')[1].split('"')[0]
-                if regex_search.match(asset_url.split("/")[-1]):
-                    asset = asset_url
-                    break
-            except:
-                continue
-    if version and asset:
-        return (True,version,asset)
-    return (False,version,asset)
+    return (version and asset,version,asset)
 
 def get_bin_path(binary):
     bin_path = None
