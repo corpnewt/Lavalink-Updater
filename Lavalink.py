@@ -496,7 +496,12 @@ def main(
     except KeyboardInterrupt:
         print("\n - Keyboard interrupt, exiting...\n")
         exit()
-    exit(lavalink.returncode)
+    try:
+        exit(lavalink.returncode)
+    except:
+        # We couldn't get the return code - the process
+        # was likely killed - so exit with a 0 status
+        exit(0)
 
 JAVA_PATH = get_bin_path("java")
 USE_WMIC = get_bin_path("wmic")
