@@ -216,6 +216,12 @@ def check_pids(prompt_answer = None):
                 u.head("Killing Lavalink Processes")
                 print("")
             for c,p in pids:
+                # Check if the PID still corresponds to a running
+                # process
+                print("Verifying PID {} is still active...".format(p))
+                if not get_pids(pid=p):
+                    print(" - No longer active")
+                    continue
                 print("Killing PID {}...".format(p))
                 returncode = kill_pid(p)
                 if returncode == 0:
