@@ -272,13 +272,14 @@ def get_pids(pid = None, include_comm = False):
     else:
         comm = ["ps","aux"]
     try:
-        p = subprocess.run(
+        p = subprocess.Popen(
             comm,
-            check=True,
-            stderr=subprocess.DEVNULL,
+            stderr=getattr(subprocess,"DEVNULL",open(os.devnull,"w")),
             stdout=subprocess.PIPE
         )
-        procs = p.stdout.decode("utf-8").replace("\r","")
+        o,e = p.communicate()
+        assert p.returncode == 0
+        procs = o.decode("utf-8").replace("\r","")
         for line in procs.split("\n"):
             # Check if it's got valid command output
             m = COMMAND_REG.match(line)
@@ -371,12 +372,13 @@ def main(
             cwd = os.getcwd()
             os.chdir(os.path.dirname(os.path.realpath(__file__)))
             try:
-                p = subprocess.run(
+                p = subprocess.Popen(
                     [git,"pull"],
-                    stderr=subprocess.DEVNULL,
+                    stderr=getattr(subprocess,"DEVNULL",open(os.devnull,"w")),
                     stdout=subprocess.PIPE
                 )
-                if p.returncode == 0 and not "up to date" in p.stdout.decode("utf-8"):
+                o,e = p.communicate()
+                if p.returncode == 0 and not "up to date" in o.decode("utf-8"):
                     updated = True
             except:
                 pass
