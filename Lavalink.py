@@ -241,7 +241,11 @@ def kill_pid(pid):
     timeout = 10 # Allow up to 10 seconds to kill
     # Automate taskkill or kill based on os
     comm = ["taskkill","/f","/pid",str(pid),"/t"] if os.name=="nt" else ["kill",str(pid)]
-    p = subprocess.Popen(comm,stderr=subprocess.DEVNULL,stdout=subprocess.DEVNULL)
+    p = subprocess.Popen(
+        comm,
+        stderr=getattr(subprocess,"DEVNULL",open(os.devnull,"w")),
+        stdout=getattr(subprocess,"DEVNULL",open(os.devnull,"w"))
+    )
     try:
         p.communicate() # Wait for it to complete
     except KeyboardInterrupt:
