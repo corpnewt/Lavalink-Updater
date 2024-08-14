@@ -391,7 +391,11 @@ def main(
                 lines = print_line(lines," - Updated, restarting...\n")
                 # Restart ourselves via subprocess
                 p = subprocess.Popen([sys.executable,os.path.realpath(__file__)]+sys.argv[1:])
-                p.communicate()
+                try:
+                    p.communicate()
+                except KeyboardInterrupt:
+                    print("\n - Keyboard interrupt, exiting...\n")
+                    exit()
                 exit(p.returncode)
             lines = print_line(lines," - Already up to date\n")
     lines = print_line(lines,"Gathering info...")
