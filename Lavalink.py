@@ -380,7 +380,6 @@ def main(
                 try:
                     p.communicate()
                 except KeyboardInterrupt:
-                    print("\n - Keyboard interrupt, exiting...\n")
                     exit()
                 exit(p.returncode)
             lines = print_line(lines," - Already up to date\n")
