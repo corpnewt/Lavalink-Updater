@@ -132,27 +132,22 @@ def get_latest_html_info(url, regex_search):
             return (False,None,None)
     # Now we should have the target URL including the tag.  Let's
     # just rip the tag from it and try to load those assets.
-    version = asset_url = asset = None
+    version = assets_url = asset = assets_html = None
     try:
         version = url.split("/")[-1]
         assets_url = url.split("/releases/")[0]+"/releases/expanded_assets/{}".format(version)
-        asset_html = DL.get_string(asset_url,progress=False)
-        assert asset_html
+        assets_html = DL.get_string(assets_url,progress=False)
+        assert assets_html
     except:
         return (False,version,asset)
     # Check for expanded assets and version number
-    asset_html = version = None
     try:
-        asset_url = next((x.split('src="')[1].split('"')[0] for x in html.split("\n") if "expanded_assets" in x),None)
-        assert asset_url
-        version = asset_url.split("/")[-1]
-        asset_html = DL.get_string(asset_url,progress=False)
-        for line in asset_html.split("\n"):
+        for line in assets_html.split("\n"):
             if '<a href="' in line:
                 try:
-                    asset_url = "https://github.com"+line.split('<a href="')[1].split('"')[0]
-                    if regex_search.match(asset_url.split("/")[-1]):
-                        asset = asset_url
+                    url = "https://github.com"+line.split('<a href="')[1].split('"')[0]
+                    if regex_search.match(url.split("/")[-1]):
+                        asset = url
                         break
                 except:
                     continue
