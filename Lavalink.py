@@ -197,7 +197,15 @@ def get_bin_path(binary):
         pass
     return bin_path
 
-def check_pids(prompt_answer = None):
+def cleanup(temp):
+    if temp and os.path.exists(temp):
+        shutil.rmtree(temp,ignore_errors=True)
+
+def cleanexit(temp,code=0):
+    cleanup(temp)
+    exit(code)
+
+def check_pids(prompt_answer=None,temp=None):
     # Gather a list of PIDs for java apps that appear to be running lavalink
     # and ask the user if they want to auto-kill them, ignore, or they can just
     # press enter to refresh the list.
@@ -226,14 +234,15 @@ def check_pids(prompt_answer = None):
             try:
                 prompt = u.grab("Would you like to terminate them? ([y]es/[n]o/[q]uit):  ")
             except KeyboardInterrupt:
-                exit()
+                cleanexit(temp)
             if not len(prompt):
                 continue
+            prompt = prompt.lower()
         # We should have our prompt at this point
         if not prompt in ("y","n","q"):
             continue
         if prompt == "q":
-            exit()
+            cleanexit(temp)
         elif prompt == "y":
             # Let's iterate them and kill them individually
             if prompt_answer is None:
@@ -247,7 +256,7 @@ def check_pids(prompt_answer = None):
                     print(" - No longer active")
                     continue
                 print("Killing PID {}...".format(p))
-                returncode = kill_pid(p)
+                returncode = kill_pid(p,temp=temp)
                 if returncode == 0:
                     print(" - Killed")
                 else:
@@ -261,7 +270,7 @@ def check_pids(prompt_answer = None):
         # so that we can re-use it as needed
         return (prompt,prompt_answer is None)
 
-def kill_pid(pid):
+def kill_pid(pid,temp=None):
     timeout = 10 # Allow up to 10 seconds to kill
     # Automate taskkill or kill based on os
     comm = ["taskkill","/f","/pid",str(pid),"/t"] if os.name=="nt" else ["kill",str(pid)]
@@ -274,7 +283,7 @@ def kill_pid(pid):
         p.communicate() # Wait for it to complete
     except KeyboardInterrupt:
         print("\n - Keyboard interrupt, exiting...\n")
-        exit()
+        cleanexit(temp)
     if p.returncode != 0:
         return p.returncode # Something went wrong killing it
     # Verify it closed on a timed loop
@@ -537,7 +546,7 @@ def main(
         # Iterate the files we need to update
         lines = print_line(lines,"\nMoving files into place...")
         # Prompt to quit other instances - even if just updating
-        prompt_answer,printed = check_pids(prompt_answer=prompt_answer)
+        prompt_answer,printed = check_pids(prompt_answer=prompt_answer,temp=temp)
         if printed:
             # Re-print our prior lines
             u.head()
@@ -555,11 +564,10 @@ def main(
                 shutil.move(src,dest)
             except Exception as e:
                 lines = print_line(lines," --> Failed to copy: {}".format(e))
-    if temp and os.path.exists(temp):
-        # Remove the temp dir
-        shutil.rmtree(temp,ignore_errors=True)
+    # Clean up the temp directory, if any
+    cleanup(temp)
     if only_update:
-        # Bail here
+        # Bail here if we're only updating
         exit()
     # Kill the running instance if any
     prompt_answer,printed = check_pids(prompt_answer=prompt_answer)
