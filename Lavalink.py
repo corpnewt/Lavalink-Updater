@@ -41,9 +41,35 @@ def check_yts_version(yml_file):
             break
     return yts_version
 
-def update_yts_version(yml_file,version):
+def check_plugin_dir(yml_file):
     if not yml_file or not os.path.isfile(yml_file):
-        return False
+        return None
+    with open(yml_file) as f:
+        yml_data = f.read()
+    plugin_dir = None
+    for line in yml_data.split("\n"):
+        if line.lstrip().startswith("pluginsDir: "):
+            # Rip the plugin directory if found
+            plugin_dir = "pluginsDir: ".join(line.lstrip().split("pluginsDir: ")[1:])
+            if plugin_dir[0] == plugin_dir[-1] == '"':
+                # Got quotes
+                plugin_dir = plugin_dir[1:-1]
+            # Get the real path
+            try:
+                cwd = os.getcwd()
+                os.chdir(os.path.dirname(os.path.realpath(__file__)))
+                plugin_dir = os.path.realpath(plugin_dir)
+            except Exception:
+                return None
+            finally:
+                os.chdir(cwd)
+            break
+    # Fall back on the default path of ./plugins
+    return plugin_dir or os.path.join(os.path.dirname(os.path.realpath(__file__)),"plugins")
+
+def update_yts_version(yml_file,version,temp):
+    if not yml_file or not os.path.isfile(yml_file):
+        return None
     with open(yml_file) as f:
         yml_data = f.read()
     new_data = []
@@ -58,10 +84,11 @@ def update_yts_version(yml_file,version):
             found = True
         new_data.append(line)
     if not found:
-        return False
-    with open(yml_file,"w") as f:
+        return None
+    temp_yml = os.path.join(temp,os.path.basename(yml_file))
+    with open(temp_yml,"w") as f:
         f.write("\n".join(new_data))
-    return True
+    return temp_yml
 
 def check_lavalink_version(lavalink_file):
     lavalink_version = None
@@ -193,7 +220,9 @@ def check_pids(prompt_answer = None):
             for c,p in pids:
                 print(" - {} | {} {}".format(str(p).rjust(pid_width),c.group("process"),c.group("arguments").strip()))
             print("")
-            print("Multiple instances of Lavalink that use the same port will conflict.")
+            print("Multiple instances of Lavalink that use the same port will conflict")
+            print("and open file handles may prevent updates.")
+            print("")
             try:
                 prompt = u.grab("Would you like to terminate them? ([y]es/[n]o/[q]uit):  ")
             except KeyboardInterrupt:
@@ -318,51 +347,13 @@ def main(
     l_target = None,
     y_target = None
     ):
-    if list_update:
-        print("Local versions:")
-        yts_version = check_yts_version(YML_PATH)
-        print(" - YouTube-Source: {}".format(yts_version or "MISSING"))
-        ll_version = check_lavalink_version(LAVALINK_PATH)
-        print(" - Lavalink: {}".format(ll_version or ("JAVA MISSING" if not JAVA_PATH else "MISSING")))
-        print("Remote versions:")
-        # Only checking for updates - gather them and report
-        y_success,y_version,y_ulr = get_latest_info(
-            YTSOURCE_URL.format("latest"),
-            YTSOURCE_API.format("latest"),
-            YTSOURCE_REG,
-            prioritize_html=prioritize_html
-        )
-        if not y_success:
-            print(" - YouTube-Source: Error checking for updates")
-        else:
-            print(" - YouTube-Source: {}".format(y_version))
-        l_success,l_version,l_url = get_latest_info(
-            LAVALINK_URL.format("latest"),
-            LAVALINK_API.format("latest"),
-            LAVALINK_REG,
-            prioritize_html=prioritize_html
-        )
-        if not l_success:
-            print(" - Lavalink: Error checking for updates")
-        else:
-            print(" - Lavalink: {}".format(l_version))
-        # Print if either needs an update
-        if y_version or l_version:
-            print("")
-        if y_version:
-            if yts_version is None or u.compare_versions(yts_version,y_version):
-                print("YouTube-Source update available")
-            else:
-                print("YouTube-Source is up to date")
-        if l_version:
-            if ll_version is None or u.compare_versions(ll_version,l_version):
-                print("Lavalink update available")
-            else:
-                print("Lavalink is up to date")
-        exit()
-    u.head()
-    lines = print_line([],"\n{}: Starting Lavalink update...\n".format(datetime.datetime.now().time().isoformat()))
+    lines = []
+    if not list_update:
+        # Print the header if we're doing more than listing updates
+        u.head()
+        lines = print_line(lines,"\n{}: Starting Lavalink update...\n".format(datetime.datetime.now().time().isoformat()))
     if not skip_git:
+        # Self update check unless explicitly told to skip
         git = get_bin_path("git")
         if git:
             lines = print_line(lines,"Checking for Lavalink-Updater updates...")
@@ -393,8 +384,7 @@ def main(
                     exit()
                 exit(p.returncode)
             lines = print_line(lines," - Already up to date\n")
-    lines = print_line(lines,"Gathering info...")
-    # First check for java
+    # Gather info as needed - first check for java
     if not JAVA_PATH:
         print("Could not locate java!")
         print("")
@@ -405,10 +395,21 @@ def main(
         print("Please visit the following link to create one:")
         print(" - {}\n".format(DOC_URL))
         exit(1)
-    # Scrape the version
-    lines = print_line(lines,"Gathering local versions...")
+    # Scrape the Lavalink and YouTube-Source versions
+    lines = print_line(lines,"Local versions:")
+    ll_version = check_lavalink_version(LAVALINK_PATH)
+    lines = print_line(lines," - Lavalink: {}".format(ll_version or "MISSING"))
     yts_version = check_yts_version(YML_PATH)
-    lines = print_line(lines," - YouTube-Source: {}".format(yts_version or "MISSING"))
+    plugin_dir = check_plugin_dir(YML_PATH)
+    if not plugin_dir:
+        print("Could not locate a valid pluginsDir in {}!\n".format(YML_PATH))
+        print("Please ")
+    yts_path = os.path.join(plugin_dir,"youtube-plugin-{}.jar".format(yts_version))
+    lines = print_line(lines," - YouTube-Source: {}{}".format(
+        yts_version or "MISSING",
+        " - PLUGIN FOLDER MISSING" if not os.path.isdir(plugin_dir) \
+        else " - FILE MISSING" if not os.path.isfile(yts_path) else ""
+    ))
     if not yts_version:
         print("\nCould not locate youtube-plugin information in")
         print(" - {}".format(YML_PATH))
@@ -416,73 +417,148 @@ def main(
         print("Please visit the following link for info:")
         print(" - {}\n".format(DOC_URL))
         exit(1)
-    # Let's check for updates now
-    ll_version = check_lavalink_version(LAVALINK_PATH)
-    lines = print_line(lines," - Lavalink: {}".format(ll_version or "MISSING"))
-    # Lavalink first
-    if only_update or update:
-        # The GitHub API expects api.github.com/repos/OWNER/REPO/releases/tags/TAG
-        # if not latest
-        y_api_target = l_api_target = None
-        if y_target:
-            y_target = quote(y_target)
-            y_api_target = "tags/{}".format(y_target)
-        if l_target:
-            l_target = quote(l_target)
-            l_api_target = "tags/{}".format(l_target)
-        # If we're only forcing when different - check if they're not equal,
-        # otherwise check for remote > local
-        allowed_comparisons = (True,False) if force_if_different else (True,)
-        lines = print_line(lines,"Gathering remote versions...")
-        y_success,y_version,y_url = get_latest_info(
-            YTSOURCE_URL.format(y_target or "latest"),
-            YTSOURCE_API.format(y_api_target or "latest"),
-            YTSOURCE_REG,
-            prioritize_html=prioritize_html
-        )
-        if not y_success:
-            lines = print_line(lines," - YouTube-Source: Error checking for updates")
+    # The GitHub API expects api.github.com/repos/OWNER/REPO/releases/tags/TAG
+    # if not latest
+    y_api_target = l_api_target = None
+    if l_target:
+        l_target = quote(l_target)
+        l_api_target = "tags/{}".format(l_target)
+    if y_target:
+        y_target = quote(y_target)
+        y_api_target = "tags/{}".format(y_target)
+    # If we're only forcing when different - check if they're not equal,
+    # otherwise check for remote > local
+    allowed_comparisons = (True,False) if force_if_different else (True,)
+    lines = print_line(lines,"Remote versions:")
+    l_success,l_version,l_url = get_latest_info(
+        LAVALINK_URL.format(l_target or "latest"),
+        LAVALINK_API.format(l_api_target or "latest"),
+        LAVALINK_REG,
+        prioritize_html=prioritize_html
+    )
+    if not l_success:
+        lines = print_line(lines," - Lavalink: Error checking for updates")
+    else:
+        lines = print_line(lines," - Lavalink: {}".format(l_version))
+    y_success,y_version,y_url = get_latest_info(
+        YTSOURCE_URL.format(y_target or "latest"),
+        YTSOURCE_API.format(y_api_target or "latest"),
+        YTSOURCE_REG,
+        prioritize_html=prioritize_html
+    )
+    if not y_success:
+        lines = print_line(lines," - YouTube-Source: Error checking for updates")
+    else:
+        lines = print_line(lines," - YouTube-Source: {}".format(y_version))
+    if list_update:
+        # Print if either needs an update
+        if y_version or l_version:
+            lines = print_line(lines,"")
+        if l_version:
+            if ll_version is None or u.compare_versions(ll_version,l_version):
+                lines = print_line(lines,"Lavalink update available")
+            else:
+                lines = print_line(lines,"Lavalink is up to date")
+        if y_version:
+            if yts_version is None or u.compare_versions(yts_version,y_version):
+                lines = print_line(lines,"YouTube-Source update available")
+            else:
+                lines = print_line(lines,"YouTube-Source is up to date")
+        exit()
+    # Updates are required if the current file does not exist, if we're
+    # forcing updates, or if our version number means we need one
+    #
+    files_to_update = []
+    # Let's see if we qualify for updates
+    l_allowed = force or ll_version  is None or ((only_update or update) and u.compare_versions(ll_version,l_version)  in allowed_comparisons)
+    y_allowed = force or yts_version is None or ((only_update or update) and u.compare_versions(yts_version,y_version) in allowed_comparisons)
+    # First we check if Lavalink needs to be updated - and download it to a temp dir
+    temp = None
+    if l_allowed:
+        lines = print_line(lines,"\n{}Updating Lavalink...".format("Force-" if force or force_if_different else ""))
+        if not any((l_url,l_version)):
+            lines = print_line(lines," - Could not resolve URL or version!  Skipping...")
         else:
-            lines = print_line(lines," - YouTube-Source: {}".format(y_version))
-        l_success,l_version,l_url = get_latest_info(
-            LAVALINK_URL.format(l_target or "latest"),
-            LAVALINK_API.format(l_api_target or "latest"),
-            LAVALINK_REG,
-            prioritize_html=prioritize_html
-        )
-        if not l_success:
-            lines = print_line(lines," - Lavalink: Error checking for updates")
-        else:
-            lines = print_line(lines," - Lavalink: {}".format(l_version))
-        if (l_version and l_url) and (force or ll_version is None or u.compare_versions(ll_version,l_version) in allowed_comparisons):
-            lines = print_line(lines,"\n{}Updating Lavalink...".format("Force-" if force or force_if_different else ""))
             lines = print_line(lines,"")
             lines = print_line(lines,"Downloading {} ({})...".format(os.path.basename(l_url),l_version))
-            temp = tempfile.mkdtemp()
+            temp = temp or tempfile.mkdtemp()
             try:
                 ll_temp = DL.stream_to_file(l_url,os.path.join(temp,os.path.basename(l_url)))
                 assert ll_temp is not None
-                # Kill the running instance if any
-                if not only_update:
-                    prompt_answer,printed = check_pids(prompt_answer=prompt_answer)
-                    if printed:
-                        # Re-print our prior lines
-                        u.head()
-                        print("\n".join(lines))
-                # Remove the current file and move the new one over
-                lines = print_line(lines,"Moving {} into place...".format(os.path.basename(l_url)))
-                shutil.move(ll_temp,LAVALINK_PATH)
-                lines = print_line(lines,"Updated {} to {}".format(os.path.basename(l_url),l_version))
+                # Add it to the list of files to update
+                files_to_update.append((
+                    ll_temp,
+                    LAVALINK_PATH,
+                    l_version
+                ))
             except Exception as e:
-                lines = print_line(lines,"Update failed: {}".format(e))
-            finally:
-                shutil.rmtree(temp,ignore_errors=True)
-        if y_version and (force or u.compare_versions(yts_version,y_version) in allowed_comparisons):
-            lines = print_line(lines,"\n{}Updating YouTube-Source...".format("Force-" if force or force_if_different else ""))
-            if not update_yts_version(YML_PATH,y_version):
-                lines = print_line(lines,"Update failed - please verify your application.yml!")
-            else:
-                lines = print_line(lines,"Updated YouTube-Source to {}".format(y_version))
+                lines = print_line(lines," - Failed to download: {}".format(e))
+    if y_allowed or not os.path.isfile(yts_path):
+        lines = print_line(lines,"\n{}Updating YouTube-Source...".format("Force-" if force or force_if_different else ""))
+        if not y_allowed and yts_version:
+            # We're not explicitly updating, but our declared
+            # file does not exist.  Let's override the search
+            # values with the one we're expecting.
+            y_target = quote(yts_version)
+            y_api_target = "tags/{}".format(y_target)
+            y_success,y_version,y_url = get_latest_info(
+                YTSOURCE_URL.format(y_target or "latest"),
+                YTSOURCE_API.format(y_api_target or "latest"),
+                YTSOURCE_REG,
+                prioritize_html=prioritize_html
+            )
+        if not any((y_url,y_version)):
+            lines = print_line(lines," - Could not resolve URL or version!  Skipping...")
+        else:
+            lines = print_line(lines,"")
+            lines = print_line(lines,"Downloading {} ({})...".format(os.path.basename(y_url),y_version))
+            temp = temp or tempfile.mkdtemp()
+            try:
+                yt_temp = DL.stream_to_file(y_url,os.path.join(temp,os.path.basename(y_url)))
+                assert yt_temp is not None
+                # Update the yml to expect the new version
+                yml_temp = update_yts_version(YML_PATH,y_version,temp)
+                assert yml_temp is not None
+                # Add both to the list of files to update
+                files_to_update.extend([
+                    (
+                        yt_temp,
+                        os.path.join(plugin_dir,os.path.basename(yt_temp)),
+                        y_version
+                    ),
+                    (
+                        yml_temp,
+                        YML_PATH,
+                        y_version
+                    )
+                ])
+            except Exception as e:
+                lines = print_line(lines," - Failed to download: {}".format(e))
+    if files_to_update:
+        # Iterate the files we need to update
+        lines = print_line(lines,"\nMoving files into place...")
+        # Prompt to quit other instances - even if just updating
+        prompt_answer,printed = check_pids(prompt_answer=prompt_answer)
+        if printed:
+            # Re-print our prior lines
+            u.head()
+            print("\n".join(lines))
+        for src,dest,vers in files_to_update:
+            lines = print_line(lines," - {}{}".format(
+                os.path.basename(src),
+                " ({})".format(vers) if vers else ""
+            ))
+            try:
+                if not os.path.isdir(os.path.dirname(dest)):
+                    # Attempt to create missing directories
+                    os.makedirs(os.path.dirname(dest))
+                # Copy the target file
+                shutil.move(src,dest)
+            except Exception as e:
+                lines = print_line(lines," --> Failed to copy: {}".format(e))
+    if temp and os.path.exists(temp):
+        # Remove the temp dir
+        shutil.rmtree(temp,ignore_errors=True)
     if only_update:
         # Bail here
         exit()
